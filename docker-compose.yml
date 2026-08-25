@@ -1,0 +1,52 @@
+name: cloudflared
+
+services:
+  # cloudflared uses raw TCP/HTTP2 for the Edge connection. The bridge below
+  # is what makes this connector use the local HTTP/SOCKS proxy on port 7890.
+  cloudflared-proxy-bridge:
+    build:
+      context: ./proxy-bridge
+      network: host
+      args:
+        HTTP_PROXY: http://127.0.0.1:7890
+        HTTPS_PROXY: http://127.0.0.1:7890
+    image: local/cloudflared-connect-proxy:1
+    container_name: cloudflared-proxy-bridge
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      LISTEN_HOST: 127.0.0.1
+      LISTEN_PORT: "7844"
+      LISTEN_IPS: "127.0.0.1,127.0.0.2,127.0.0.3,127.0.0.4,127.0.0.5,127.0.0.6,127.0.0.7,127.0.0.8,127.0.0.9"
+      PROXY_HOST: 127.0.0.1
+      PROXY_PORT: "7890"
+
+  cloudflared-proxy:
+    build:
+      context: ./proxy-supervisor
+      network: host
+      args:
+        HTTP_PROXY: http://127.0.0.1:7890
+        HTTPS_PROXY: http://127.0.0.1:7890
+    image: local/cloudflared-supervisor:1
+    container_name: cloudflared-proxy
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      cloudflared-proxy-bridge:
+        condition: service_started
+    extra_hosts:
+      - "region1.v2.argotunnel.com:127.0.0.2"
+      - "region1.v2.argotunnel.com:127.0.0.3"
+      - "region1.v2.argotunnel.com:127.0.0.4"
+      - "region1.v2.argotunnel.com:127.0.0.5"
+      - "region2.v2.argotunnel.com:127.0.0.6"
+      - "region2.v2.argotunnel.com:127.0.0.7"
+      - "region2.v2.argotunnel.com:127.0.0.8"
+      - "region2.v2.argotunnel.com:127.0.0.9"
+    environment:
+      TUNNEL_TOKEN: "${CLOUDFLARED_TUNNEL_TOKEN:?CLOUDFLARED_TUNNEL_TOKEN is required}"
+      METRICS_ADDRESS: 127.0.0.1:20241
+      CHECK_INTERVAL_SECONDS: "10"
+      STARTUP_GRACE_SECONDS: "120"
+      UNREADY_TIMEOUT_SECONDS: "200"
